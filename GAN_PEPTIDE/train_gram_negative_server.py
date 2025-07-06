@@ -44,8 +44,24 @@ def to_onehot(file_path):
     return one_hot_pep
 
 def return_index(one_hot_coding):
-    index = np.argwhere(one_hot_coding == 1)
-    return index[:, -1].reshape(-1, 30)
+    """将one-hot编码或softmax输出转换为索引"""
+    # 如果输入是torch张量，转换为numpy
+    if hasattr(one_hot_coding, 'numpy'):
+        one_hot_coding = one_hot_coding.numpy()
+
+    # 如果是连续值（如tanh输出），使用argmax
+    if one_hot_coding.dtype == np.float32 or one_hot_coding.dtype == np.float64:
+        # 对最后一个维度取argmax
+        indices = np.argmax(one_hot_coding, axis=-1)
+        return indices.reshape(-1, 30)
+    else:
+        # 原始的one-hot处理方式
+        index = np.argwhere(one_hot_coding == 1)
+        if len(index) == 0:
+            # 如果没有找到1，使用argmax作为备选
+            indices = np.argmax(one_hot_coding, axis=-1)
+            return indices.reshape(-1, 30)
+        return index[:, -1].reshape(-1, 30)
 
 def load_array(data_arrays, batch_size, is_train=True):
     dataset = data.TensorDataset(*data_arrays)
@@ -176,7 +192,16 @@ def generate_samples(gen, device, num_samples, z_dim, save_path, logger):
         noise = torch.randn(num_samples, z_dim, 1, 1).to(device)
         labels = torch.zeros(num_samples, 1, dtype=torch.long).to(device)
         fake_samples = gen(noise, labels)
-        fake_indices = return_index(fake_samples.cpu())
+
+        # 将tanh输出转换为概率分布，然后转换为索引
+        # tanh输出范围是[-1,1]，转换为[0,1]
+        fake_samples_normalized = (fake_samples + 1) / 2
+
+        # 应用softmax使其成为概率分布
+        fake_samples_prob = torch.softmax(fake_samples_normalized.view(-1, 30, 21), dim=-1)
+
+        # 转换为索引
+        fake_indices = return_index(fake_samples_prob.cpu())
         np.save(save_path, fake_indices)
         logger.info(f"生成 {num_samples} 个样本保存到 {save_path}")
     gen.train()
