@@ -172,7 +172,8 @@ def save_checkpoint(state, filename, logger):
 
 def load_checkpoint(checkpoint_path, gen, critic, opt_gen, opt_critic, logger):
     logger.info(f"从 {checkpoint_path} 加载检查点")
-    checkpoint = torch.load(checkpoint_path)
+    # 修复PyTorch 2.6的weights_only问题
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
     gen.load_state_dict(checkpoint['gen'])
     critic.load_state_dict(checkpoint['critic'])
     opt_gen.load_state_dict(checkpoint['opt_gen'])
